@@ -1,67 +1,53 @@
-#!/usr/bin/env python3
-"""Coursework simulation of repeated Wi-Fi authentication failures. No real network changes."""
+"""Safe simulation of password attempts and temporary MAC banning."""
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 
 THRESHOLD = 5
 WINDOW_MINUTES = 2
 BLOCK_MINUTES = 10
+EXPECTED_PASSWORD = "lab-password"
 
-def parse_time(value):
-    return datetime.fromisoformat(value)
 
-class WiFiAttemptDetector:
+class ResourceAccessSimulator:
     def __init__(self):
         self.failures = defaultdict(deque)
-        self.blocked_until = {}
+        self.banned_until = {}
 
-    def process(self, timestamp, device_id, success):
-        now = parse_time(timestamp)
-        # Remove expired blocks.
-        if device_id in self.blocked_until and now >= self.blocked_until[device_id]:
-            del self.blocked_until[device_id]
-            print(f"[INFO] Temporary block expired for {device_id}.")
-
-        if device_id in self.blocked_until and now < self.blocked_until[device_id]:
-            print(f"[BLOCKED] {timestamp} {device_id}: attempt rejected (simulated block).")
+    def process(self, timestamp, mac_address, password):
+        now = datetime.fromisoformat(timestamp)
+        if mac_address in self.banned_until and now >= self.banned_until[mac_address]:
+            del self.banned_until[mac_address]
+            print(f"[INFO] Temporary ban expired for {mac_address}.")
+        if mac_address in self.banned_until:
+            print(f"[BANNED] {mac_address}: resource access refused.")
+            return
+        if password == EXPECTED_PASSWORD:
+            self.failures[mac_address].clear()
+            print(f"[OK] {mac_address}: resource access granted.")
             return
 
-        if success:
-            self.failures[device_id].clear()
-            print(f"[OK] {timestamp} {device_id}: authentication succeeded.")
-            return
-
-        q = self.failures[device_id]
-        q.append(now)
+        attempts = self.failures[mac_address]
+        attempts.append(now)
         cutoff = now - timedelta(minutes=WINDOW_MINUTES)
-        while q and q[0] < cutoff:
-            q.popleft()
+        while attempts and attempts[0] < cutoff:
+            attempts.popleft()
+        print(f"[FAIL] {mac_address}: incorrect password ({len(attempts)} in window).")
+        if len(attempts) >= THRESHOLD:
+            self.banned_until[mac_address] = now + timedelta(minutes=BLOCK_MINUTES)
+            attempts.clear()
+            print(f"[ALERT] simulated MAC ban until {self.banned_until[mac_address]}.")
 
-        print(f"[FAIL] {timestamp} {device_id}: failed authentication ({len(q)} in window).")
-        if len(q) >= THRESHOLD:
-            self.blocked_until[device_id] = now + timedelta(minutes=BLOCK_MINUTES)
-            q.clear()
-            print(f"[ALERT] {device_id} flagged; simulated block until "
-                  f"{self.blocked_until[device_id].isoformat(sep=' ')}.")
 
 def main():
-    print("Wi-Fi failed-login detector — SIMULATION ONLY")
-    print("Threshold: 5 failures within 2 minutes; simulated block: 10 minutes.\n")
-    detector = WiFiAttemptDetector()
-    events = [
-        ("2026-10-19T10:00:00", "device-A", False),
-        ("2026-10-19T10:00:10", "device-A", False),
-        ("2026-10-19T10:00:20", "device-A", False),
-        ("2026-10-19T10:00:30", "device-A", False),
-        ("2026-10-19T10:00:40", "device-A", False),
-        ("2026-10-19T10:00:45", "device-A", False),
-        ("2026-10-19T10:01:00", "device-B", True),
-    ]
-    for timestamp, device_id, success in events:
-        detector.process(timestamp, device_id, success)
+    print("Resource access and MAC-ban simulation — NO NETWORK CHANGES")
+    simulator = ResourceAccessSimulator()
+    base = "2026-10-20T10:00:"
+    events = [(f"{base}{second:02d}", "AA:BB:CC:DD:EE:01", "wrong")
+              for second in (0, 10, 20, 30, 40)]
+    events.append((f"{base}50", "AA:BB:CC:DD:EE:01", "lab-password"))
+    for event in events:
+        simulator.process(*event)
 
-    print("\nFor a real access point, consult its authorized admin interface and logs.")
-    print("This script does not capture 802.11 traffic or block real Wi-Fi clients.")
 
 if __name__ == "__main__":
     main()

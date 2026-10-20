@@ -1,59 +1,75 @@
+"""Generate and correlate safe sample security events or a CSV export."""
+import argparse
+import csv
 import logging
 import re
 from collections import defaultdict
+from pathlib import Path
 
-# Step 1: Log Capturing
-# Configure the logging system
-logging.basicConfig(filename='system_logs.log',
-                    level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Log different events
-logging.info("System started")
-logging.warning("Low memory warning")
-logging.error("Failed login attempt from IP: 192.168.1.10")
-logging.info("User admin logged in successfully")
-logging.error("Disk space error on /dev/sda1")
-logging.info("System shutdown initiated")
-logging.info("Failed login attempt from IP: 192.168.1.11")
+def create_sample_log(path):
+    logging.basicConfig(
+        filename=path,
+        filemode="w",
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        force=True,
+    )
+    logging.info("File opened: report.txt by user=student")
+    logging.error("Failed login attempt from IP: 192.168.1.10")
+    logging.info("File deleted: temporary.txt by user=student")
+    logging.info("User student logged in successfully")
+    logging.error("Disk space error on test-volume")
+    logging.info("System shutdown initiated")
+    logging.error("Failed login attempt from IP: 192.168.1.11")
 
-# Step 2: Event Correlation
+
 def correlate_events(logfile):
-    event_patterns = {
-        'failed_login': r'Failed login attempt from IP: ([\d\.]+)',
-        'disk_error': r'Disk space error on (.+)',
-        'shutdown': r'System shutdown initiated',
+    patterns = {
+        "failed_login": r"Failed login attempt from IP: ([\d.]+)",
+        "disk_error": r"Disk space error on (.+)",
+        "file_activity": r"File (opened|deleted): (.+?) by user=(\w+)",
+        "shutdown": r"System shutdown initiated",
     }
+    events = defaultdict(list)
+    with open(logfile, encoding="utf-8") as handle:
+        for line in handle:
+            for name, pattern in patterns.items():
+                match = re.search(pattern, line)
+                if match:
+                    events[name].append(match.groups() or ("detected",))
+                    break
+    return events
 
-    correlated_events = defaultdict(list)
 
-    with open(logfile, 'r') as f:
-        for line in f:
-            # Check for failed login attempts
-            if re.search(event_patterns['failed_login'], line):
-                ip = re.findall(event_patterns['failed_login'], line)[0]
-                correlated_events['failed_login'].append(ip)
-            
-            # Check for disk space errors
-            elif re.search(event_patterns['disk_error'], line):
-                disk = re.findall(event_patterns['disk_error'], line)[0]
-                correlated_events['disk_error'].append(disk)
+def correlate_csv(csv_file):
+    events = defaultdict(list)
+    with open(csv_file, newline="", encoding="utf-8-sig") as handle:
+        for row in csv.DictReader(handle):
+            event_type = row.get("event", "unknown")
+            events[event_type].append(row)
+    return events
 
-            # Check for system shutdown events
-            elif re.search(event_patterns['shutdown'], line):
-                correlated_events['shutdown'].append("System shutdown detected")
 
-    return correlated_events
+def display(events):
+    print("Correlated Event Summary:")
+    for event, details in events.items():
+        print(f"- {event}: {len(details)} event(s)")
+        for detail in details:
+            print(f"  {detail}")
 
-# Step 3: Display the Correlated Events
-correlated_data = correlate_events('system_logs.log')
 
-# Output the correlated events
-print("Correlated Event Summary:")
-for event, details in correlated_data.items():
-    if event == 'failed_login':
-        print(f"Failed login attempts from IPs: {', '.join(details)}")
-    elif event == 'disk_error':
-        print(f"Disk errors detected on: {', '.join(details)}")
-    elif event == 'shutdown':
-        print(f"{len(details)} shutdown events detected")
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--csv", type=Path, help="CSV with an event column")
+    parser.add_argument("--log", type=Path, default=Path("system_logs.log"))
+    args = parser.parse_args()
+    if args.csv:
+        display(correlate_csv(args.csv))
+    else:
+        create_sample_log(args.log)
+        display(correlate_events(args.log))
+
+
+if __name__ == "__main__":
+    main()
