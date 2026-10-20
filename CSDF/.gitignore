@@ -65,6 +65,8 @@ recovery.img
 recovered.*
 system_logs.log
 *.eml
+blocked_devices.txt
+recovered_files_demo/
 
 # Operating system files
 .DS_Store

@@ -1,11 +1,27 @@
-# CSDF scripts
+# Cyber Security and Digital Forensics (CSDF) assignments
 
-The assignment write-up, algorithms, safe procedures, and sample-output
-format are in [CSDF_WRITEUP.md](./CSDF_WRITEUP.md).
+This folder contains five coursework demonstrations. The programs use
+synthetic data or copied evidence by default so they can be explained and
+tested without changing a real network, disk, partition table, or firewall.
 
-## Windows setup
+## Folder structure
 
-Open PowerShell in this folder:
+| Assignment | File | Main concept |
+|---|---|---|
+| 1 | `EMAIL_HEADER/email_header.py` | RFC 822 email-header analysis |
+| 2 | `CAPTCHA/captcha_generator.py` | CAPTCHA generation and verification |
+| 3 | `PROHIBIT_WIFI/wifi_detector.py` | Password-attempt threshold and MAC-ban simulation |
+| 4 | `FILES_PARTITION_RECOVERY/file_rec.py` | Deleted-file recovery from a forensic image |
+| 5 | `LOG_CAPTURING/log.py` | Log capture and event correlation |
+
+The original Wi-Fi and partition scripts are also retained in
+`PROHIBIT_WIFI/prohibit.py` and `FILES_PARTITION_RECOVERY/part_rec.py`, but
+their default behavior is explanation-only because real monitor-mode and
+partition operations can affect a system.
+
+## Setup on Windows
+
+Run from the `CSDF` folder:
 
 ```powershell
 cd "D:\SEM7 MINI PROJECT\LP4\codes\CSDF"
@@ -14,75 +30,269 @@ py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-The `.venv` directory is ignored by Git. Use the explicit executable path above
-so activation is not required. If activation is preferred, run
-`.\.venv\Scripts\Activate.ps1` first and then use `python`.
+The requirements are:
 
-## Run each script
+- `captcha`: CAPTCHA support and bundled font resources.
+- `Pillow`: image creation, rotation, drawing, and saving.
 
-Run these from the `CSDF` directory:
+The other assignments use Python's standard library.
+
+## Assignment 1: email header analysis
+
+### Objective and theory
+
+An email is represented as an RFC 822 message containing headers and a body.
+Headers record sender and routing information. Important security-related
+headers include:
+
+- `From`: displayed sender identity.
+- `Return-Path`: address used for mail return handling.
+- `Date`: sender-provided date and time-zone offset.
+- `Received`: mail-server route and timestamps.
+- `DKIM-Signature`: indicates that a DKIM signature is attached.
+- `Authentication-Results`: records SPF, DKIM, and DMARC results reported by
+  the receiving mail server.
+
+The presence of a `DKIM-Signature` is not the same as a successful DKIM
+verification. The program therefore reads the named authentication results.
+
+### How the code works
+
+1. Opens an `.eml` file as raw bytes.
+2. Parses it with Python's `email` parser.
+3. Prints every header.
+4. Extracts important named headers.
+5. Parses the `Date` field and reports its time zone.
+6. Reads SPF, DKIM, and DMARC statuses from `Authentication-Results`.
+7. Extracts IPv4 addresses from each `Received` header.
+
+### Run with the included synthetic sample
 
 ```powershell
-# CAPTCHA: generates 8 dark, slanted, overlapping digits and verifies input
+.\.venv\Scripts\python.exe `
+  .\EMAIL_HEADER\email_header.py `
+  --file .\EMAIL_HEADER\sample.eml
+```
+
+The sample contains documentation-only domains and IP addresses. It is safe
+for classroom demonstration.
+
+### Run with an approved real `.eml` file
+
+```powershell
+.\.venv\Scripts\python.exe `
+  .\EMAIL_HEADER\email_header.py `
+  --file "C:\path\to\approved-email.eml"
+```
+
+The analyzer never sends the email or contacts the mail server. Do not commit
+private `.eml` files; the Git ignore file excludes `*.eml`.
+
+## Assignment 2: CAPTCHA generation and verification
+
+### Objective and theory
+
+A CAPTCHA creates a challenge intended to be readable by a person but more
+difficult for automated recognition. This implementation follows the
+assignment requirements:
+
+- Eight random digits.
+- Dark background.
+- Slanted characters using random rotation.
+- Overlapping character placement.
+- Interference lines.
+- User input verification.
+
+### How the code works
+
+1. Generates an eight-digit random challenge.
+2. Creates a dark image with Pillow.
+3. Draws each digit using a bundled font.
+4. Rotates and overlaps the digits.
+5. Adds interference lines.
+6. Saves the image as `CAPTCHA/captcha.png`.
+7. Accepts up to three answers from the user.
+8. Prints success or failure.
+
+### Run
+
+```powershell
 .\.venv\Scripts\python.exe .\CAPTCHA\captcha_generator.py
+```
 
-# Email header analysis: uses a safe sample; add --file .\sample.eml for real approved headers
-.\.venv\Scripts\python.exe .\EMAIL_HEADER\email_header.py
+Open `CAPTCHA/captcha.png`, read the eight digits, and enter them in the
+terminal. The generated image is ignored by Git.
 
-# Log capture and event correlation: creates system_logs.log
-.\.venv\Scripts\python.exe .\LOG_CAPTURING\log.py
+## Assignment 3: password access and MAC-ban simulation
 
-# Password/resource access and temporary MAC-ban simulation (no network changes)
+### Objective and theory
+
+Repeated failed passwords may indicate a brute-force attempt. A threshold
+limits the number of failures allowed within a time window. This program uses:
+
+- Five failed attempts as the threshold.
+- A two-minute sliding time window.
+- A simulated ten-minute ban.
+- A MAC address as the simulated device identity.
+
+### How the code works
+
+1. Receives a timestamp, MAC address, and password.
+2. Checks whether the simulated ban has expired.
+3. Rejects an already-banned device.
+4. Grants access when the password is correct.
+5. Stores failed attempts in a time queue.
+6. Removes attempts outside the two-minute window.
+7. Creates a temporary simulated ban after five failures.
+
+### Run
+
+```powershell
 .\.venv\Scripts\python.exe .\PROHIBIT_WIFI\wifi_detector.py
 ```
 
-The following scripts are Linux-only coursework tools and are not safe to run
-on a normal Windows machine:
+This is a simulation. It does not change a MAC address, modify firewall
+rules, capture Wi-Fi packets, or access a router. Wireshark may be used only
+with an instructor-approved capture file.
 
-- `PROHIBIT_WIFI\prohibit.py` requires `airmon-ng`, `airodump-ng`, `iptables`,
-  a compatible wireless adapter, and administrator privileges. It changes
-  monitor mode and firewall rules.
-- `FILES_PARTITION_RECOVERY\part_rec.py` requires Linux `lsblk` and `fdisk`,
-  `sudo`, and a carefully selected disk. It can modify a partition table.
-- `FILES_PARTITION_RECOVERY\file_rec.py` requires Linux `lsblk`, `dd`, and
-  The Sleuth Kit commands `fls`, `istat`, and `icat`. It reads raw devices and
-  should only be used against an authorized forensic image.
-
-Do not run the Linux-only scripts against a disk or network without explicit
-authorization. They now default to a safe explanation mode. You can inspect
-that mode on Windows with:
+An alternate CSV-based monitor is also included. It reads
+`PROHIBIT_WIFI\wifi_logs.csv`, counts three failures per MAC address, and
+writes a simulated blocklist. It does not change the firewall or Wi-Fi:
 
 ```powershell
-.\.venv\Scripts\python.exe .\PROHIBIT_WIFI\prohibit.py
-.\.venv\Scripts\python.exe .\FILES_PARTITION_RECOVERY\part_rec.py
-.\.venv\Scripts\python.exe .\FILES_PARTITION_RECOVERY\file_rec.py
+.\.venv\Scripts\python.exe .\PROHIBIT_WIFI\wifi_monitor.py
 ```
 
-## WSL guidance
+## Assignment 4: recovery of permanently deleted data
 
-WSL is useful for learning Linux commands, but it does not normally expose a
-Windows laptop's internal Wi-Fi adapter for monitor mode. `prohibit.py` needs a
-compatible external USB adapter, Linux support, `aircrack-ng`, and `iptables`;
-do not use `--execute` on your normal network.
+### Objective and theory
 
-Do not pass Windows system disks or `/mnt/c` paths to disk-recovery commands.
-For safe practice, use a disposable virtual machine and a copied forensic
-image. The safe image inspection mode never runs `dd`:
+Deleting a file commonly removes its directory reference while some file
+content may remain until the storage blocks are reused. Forensic recovery
+should be performed on a bit-for-bit image, not on the original device.
+
+The procedure can be demonstrated with a disposable virtual disk or an
+instructor-provided image formatted as FAT, ext3, or ext4. The Sleuth Kit
+commands are:
+
+- `fls`: lists files and directory entries, including deleted entries.
+- `istat`: displays metadata for an inode.
+- `icat`: extracts file content from an inode.
+
+Autopsy provides a graphical interface for examining the same image.
+
+### Safe terminal procedure in WSL
+
+Install the tools:
+
+```bash
+sudo apt update
+sudo apt install sleuthkit
+```
+
+Against an authorized copied image:
+
+```bash
+fls -r ./test-image.dd
+istat ./test-image.dd INODE
+icat ./test-image.dd INODE > recovered.bin
+```
+
+### Python program
+
+[file_rec.py](./FILES_PARTITION_RECOVERY/file_rec.py) only inspects an
+existing image. It does not run `dd` and does not read a live device:
 
 ```bash
 python3 FILES_PARTITION_RECOVERY/file_rec.py
-python3 FILES_PARTITION_RECOVERY/file_rec.py --execute --image ./test-image.dd
+python3 FILES_PARTITION_RECOVERY/file_rec.py \
+  --execute --image ./test-image.dd --inode INODE
 ```
 
-The partition script intentionally does not automate its destructive `fdisk`
-write step, even with `--execute`; it only displays devices and explains the
-lab requirements.
+Never use a Windows system path, `/dev/sda`, `/dev/nvme0n1`, or `/mnt/c` as a
+test target. The partition script intentionally does not automate a destructive
+partition-table write.
 
-On Windows, use the compile check below instead:
+There is also a simple signature-carving demonstration in
+`FILES_PARTITION_RECOVERY/file_recovery.py`. It requires an existing image
+file as its only argument:
 
 ```powershell
-.\.venv\Scripts\python.exe -m py_compile `
-  .\PROHIBIT_WIFI\prohibit.py `
-  .\FILES_PARTITION_RECOVERY\part_rec.py `
-  .\FILES_PARTITION_RECOVERY\file_rec.py
+.\.venv\Scripts\python.exe `
+  .\FILES_PARTITION_RECOVERY\file_recovery.py `
+  .\test-image.dd
 ```
+
+It searches the image bytes for JPG, PNG, and PDF start/end signatures and
+writes recovered copies to `FILES_PARTITION_RECOVERY\recovered_files`.
+Running it without an argument only displays the safe usage instructions:
+
+```powershell
+.\.venv\Scripts\python.exe .\FILES_PARTITION_RECOVERY\file_recovery.py
+```
+
+For a completely harmless demonstration, use its synthetic-image mode:
+
+```powershell
+.\.venv\Scripts\python.exe `
+  .\FILES_PARTITION_RECOVERY\file_recovery.py `
+  --demo
+```
+
+This creates a temporary synthetic byte file containing fake JPG, PNG, and
+PDF signatures, recovers them, and writes the results to
+`recovered_files_demo`. It does not inspect a real disk or personal file.
+
+Do not provide a live disk path. Use a disposable lab image or an
+instructor-provided copy.
+
+## Assignment 5: log capturing and event correlation
+
+### Objective and theory
+
+Log correlation groups related events to identify a sequence, such as failed
+logins followed by file activity or a shutdown. The program demonstrates the
+same idea using generated security events or an approved CSV export.
+
+### How the code works
+
+1. Creates sample log entries for file access, login attempts, disk errors, and
+   shutdown.
+2. Reads the log line by line.
+3. Uses regular expressions to identify event types.
+4. Extracts useful values such as IP addresses and file names.
+5. Groups matching events.
+6. Prints a correlated summary.
+
+It can also read a CSV file with an `event` column:
+
+```text
+timestamp,event,user,details
+2026-10-20T10:00:00,login_failure,student,wrong password
+```
+
+### Run generated demonstration
+
+```powershell
+.\.venv\Scripts\python.exe .\LOG_CAPTURING\log.py
+```
+
+### Run with an approved CSV
+
+```powershell
+.\.venv\Scripts\python.exe `
+  .\LOG_CAPTURING\log.py `
+  --csv .\events.csv
+```
+
+Windows Event Viewer can export approved logs as CSV. Do not export or share
+private user information without permission. The generated `system_logs.log`
+is ignored by Git.
+
+## Safety and limitations
+
+The sample email, Wi-Fi events, logs, and forensic instructions are intended
+for education. Real email headers, network monitoring, firewall rules,
+partition editing, and physical-media recovery require authorization and an
+isolated lab or virtual machine. The safe demonstrations do not claim to have
+performed those real-world operations.
