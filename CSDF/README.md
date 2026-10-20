@@ -10,14 +10,22 @@ tested without changing a real network, disk, partition table, or firewall.
 |---|---|---|
 | 1 | `EMAIL_HEADER/email_header.py` | RFC 822 email-header analysis |
 | 2 | `CAPTCHA/captcha_generator.py` | CAPTCHA generation and verification |
-| 3 | `PROHIBIT_WIFI/wifi_detector.py` | Password-attempt threshold and MAC-ban simulation |
-| 4 | `FILES_PARTITION_RECOVERY/file_rec.py` | Deleted-file recovery from a forensic image |
+| 3 | `PROHIBIT_WIFI/wifi_monitor.py` | CSV-based password-failure monitoring and simulated MAC blocklist |
+| 4 | `FILES_PARTITION_RECOVERY/file_recovery.py` | Safe signature-based file recovery simulation |
 | 5 | `LOG_CAPTURING/log.py` | Log capture and event correlation |
 
-The original Wi-Fi and partition scripts are also retained in
-`PROHIBIT_WIFI/prohibit.py` and `FILES_PARTITION_RECOVERY/part_rec.py`, but
-their default behavior is explanation-only because real monitor-mode and
-partition operations can affect a system.
+Supporting files are also retained:
+
+- `PROHIBIT_WIFI/wifi_logs.csv`: synthetic login-event input for the main
+  Wi-Fi monitor.
+- `PROHIBIT_WIFI/wifi_detector.py`: password/resource-access simulation with a
+  five-failure threshold.
+- `PROHIBIT_WIFI/prohibit.py`: explanation-only outline of real monitor-mode
+  tooling; it must not be used on a normal network.
+- `FILES_PARTITION_RECOVERY/file_rec.py`: optional Sleuth Kit image-inspection
+  workflow.
+- `FILES_PARTITION_RECOVERY/part_rec.py`: explanation-only partition-recovery
+  outline; it does not automate a destructive write.
 
 ## Setup on Windows
 
@@ -123,45 +131,58 @@ assignment requirements:
 Open `CAPTCHA/captcha.png`, read the eight digits, and enter them in the
 terminal. The generated image is ignored by Git.
 
-## Assignment 3: password access and MAC-ban simulation
+## Assignment 3: Wi-Fi login monitoring and MAC blocklist simulation
 
 ### Objective and theory
 
-Repeated failed passwords may indicate a brute-force attempt. A threshold
-limits the number of failures allowed within a time window. This program uses:
+Repeated failed passwords may indicate a brute-force attempt. The main program
+reads synthetic login events from `PROHIBIT_WIFI/wifi_logs.csv` and uses:
 
-- Five failed attempts as the threshold.
-- A two-minute sliding time window.
-- A simulated ten-minute ban.
-- A MAC address as the simulated device identity.
+- Three failed attempts as the threshold.
+- A MAC address as the device identity.
+- A text blocklist instead of a real firewall rule.
 
 ### How the code works
 
-1. Receives a timestamp, MAC address, and password.
-2. Checks whether the simulated ban has expired.
-3. Rejects an already-banned device.
-4. Grants access when the password is correct.
-5. Stores failed attempts in a time queue.
-6. Removes attempts outside the two-minute window.
-7. Creates a temporary simulated ban after five failures.
+1. Opens the CSV file using `csv.DictReader`.
+2. Reads the `mac` and `status` columns from each row.
+3. Counts `FAIL` events separately for each MAC address.
+4. Prints each failed or successful login event.
+5. Adds a MAC address to the simulated blocklist after three failures.
+6. Writes blocked addresses to `PROHIBIT_WIFI/blocked_devices.txt`.
 
 ### Run
+
+```powershell
+.\.venv\Scripts\python.exe .\PROHIBIT_WIFI\wifi_monitor.py
+```
+
+The main input is [wifi_logs.csv](./PROHIBIT_WIFI/wifi_logs.csv). The current
+sample contains three failed attempts for
+`AA:BB:CC:11:22:33`, followed by another failure, so that address is added to
+the simulated blocklist. A successful login for another address is also
+shown.
+
+This is a simulation. It does not change a MAC address, modify firewall rules,
+capture Wi-Fi packets, or access a router. The output file is:
+
+```text
+PROHIBIT_WIFI\blocked_devices.txt
+```
+
+The file is only a report and is ignored by Git. Wireshark may be used only
+with an instructor-approved capture file; this program does not perform live
+packet capture.
+
+The supporting [wifi_detector.py](./PROHIBIT_WIFI/wifi_detector.py) can be run
+separately for a password-entry simulation:
 
 ```powershell
 .\.venv\Scripts\python.exe .\PROHIBIT_WIFI\wifi_detector.py
 ```
 
-This is a simulation. It does not change a MAC address, modify firewall
-rules, capture Wi-Fi packets, or access a router. Wireshark may be used only
-with an instructor-approved capture file.
-
-An alternate CSV-based monitor is also included. It reads
-`PROHIBIT_WIFI\wifi_logs.csv`, counts three failures per MAC address, and
-writes a simulated blocklist. It does not change the firewall or Wi-Fi:
-
-```powershell
-.\.venv\Scripts\python.exe .\PROHIBIT_WIFI\wifi_monitor.py
-```
+It uses a five-failure threshold and a simulated ten-minute ban, but it is not
+the primary Assignment 3 program.
 
 ## Assignment 4: recovery of permanently deleted data
 
@@ -198,10 +219,45 @@ istat ./test-image.dd INODE
 icat ./test-image.dd INODE > recovered.bin
 ```
 
-### Python program
+### Main Python program
 
-[file_rec.py](./FILES_PARTITION_RECOVERY/file_rec.py) only inspects an
-existing image. It does not run `dd` and does not read a live device:
+[file_recovery.py](./FILES_PARTITION_RECOVERY/file_recovery.py) is the main
+Assignment 4 program. It performs signature carving: it searches image bytes
+for the start and end signatures of JPG, PNG, and PDF files, then writes each
+matching byte range to a recovered file.
+
+Run the completely safe synthetic simulation:
+
+```powershell
+.\.venv\Scripts\python.exe `
+  .\FILES_PARTITION_RECOVERY\file_recovery.py `
+  --demo
+```
+
+The demo creates a temporary synthetic image, recovers three fake files, and
+writes them to `recovered_files_demo`. It does not read a disk, USB drive, or
+personal file.
+
+To scan an authorized copied forensic image:
+
+```powershell
+.\.venv\Scripts\python.exe `
+  .\FILES_PARTITION_RECOVERY\file_recovery.py `
+  .\test-image.dd
+```
+
+Recovered output is written to `recovered_files`. If no image is available,
+run the program without arguments to display its usage instructions:
+
+```powershell
+.\.venv\Scripts\python.exe .\FILES_PARTITION_RECOVERY\file_recovery.py
+```
+
+### Supporting Sleuth Kit program
+
+[file_rec.py](./FILES_PARTITION_RECOVERY/file_rec.py) is an optional
+Sleuth-Kit-based workflow for an existing image. It does not run `dd` and does
+not read a live device:
 
 ```bash
 python3 FILES_PARTITION_RECOVERY/file_rec.py
